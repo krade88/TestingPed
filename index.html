@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IT Teacher Readiness - Пилот</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <div class="container topline">
+      <div>
+        <h1>Пилотная система входного тестирования преподавателей IT</h1>
+        <p class="subtitle">Колледж IT · диагностика предметной и методической готовности</p>
+      </div>
+      <nav>
+        <a href="#spec">Спецификация</a>
+        <a href="#questions">Примеры вопросов</a>
+        <a href="#pilot-test">Пробный тест</a>
+        <a href="#reports">Отчеты</a>
+        <a href="#metrics">Метрики</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section id="spec" class="grid">
+      <article class="card kpi">
+        <h3>Объем</h3>
+        <div class="score">50</div>
+        <div class="muted">вопросов (40-60)</div>
+      </article>
+      <article class="card kpi">
+        <h3>Время</h3>
+        <div class="score">75 мин</div>
+        <div class="muted">диапазон 60-90</div>
+      </article>
+      <article class="card kpi">
+        <h3>Проходной порог</h3>
+        <div class="score">75%</div>
+        <div class="muted">настраиваемый</div>
+      </article>
+      <article class="card kpi">
+        <h3>Категория готовности</h3>
+        <div class="score ok">85%+</div>
+        <div class="muted">готов к преподаванию</div>
+      </article>
+
+      <article class="card half">
+        <h2>Цели тестирования</h2>
+        <ul>
+          <li>Оценка фундаментальных знаний по ключевым IT-блокам.</li>
+          <li>Выявление дефицитов до старта преподавания.</li>
+          <li>Построение индивидуальной траектории методподдержки.</li>
+          <li>Единый стандарт качества преподавателей в онбординге.</li>
+        </ul>
+        <span class="pill">Прозрачность</span>
+        <span class="pill">Объективность</span>
+        <span class="pill">Инклюзивность</span>
+        <span class="pill">Развитие, не отсев</span>
+      </article>
+
+      <article class="card half">
+        <h2>Охват дисциплин и вес</h2>
+        <table>
+          <thead>
+            <tr><th>Блок</th><th>Вес</th><th>Пример содержания</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Программирование</td><td>25%</td><td>алгоритмы, ООП, отладка, чтение кода</td></tr>
+            <tr><td>Сети</td><td>15%</td><td>OSI/TCP-IP, DNS, HTTP/HTTPS, базовая безопасность</td></tr>
+            <tr><td>Базы данных</td><td>15%</td><td>нормализация, SQL, JOIN, агрегаты</td></tr>
+            <tr><td>Веб</td><td>15%</td><td>клиент-сервер, HTML/CSS/JS, REST/JSON</td></tr>
+            <tr><td>Git</td><td>10%</td><td>команды, ветвление, workflow</td></tr>
+            <tr><td>Педагогика</td><td>20%</td><td>объяснение, обратная связь, структура материалов</td></tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article class="card wide">
+        <h2>Формат заданий и техтребования</h2>
+        <ul>
+          <li>Типы: multiple choice, сопоставление, анализ кода, открытые ответы, мини-практика.</li>
+          <li>Сложность: 60% базовый, 30% прикладной, 10% аналитический.</li>
+          <li>Платформа для пилота: LMS (Moodle/Canvas) или Google Forms + скрипты логирования.</li>
+          <li>Обязательные функции: таймер, автосохранение, рандомизация вопросов/вариантов.</li>
+          <li>Анти-списывание: ограничение времени, 1 попытка, фиксирование смен ответа и времени на вопрос.</li>
+        </ul>
+      </article>
+    </section>
+
+    <section id="questions" class="grid" style="margin-top: 14px;">
+      <article class="card wide">
+        <h2>Примеры вопросов (демо)</h2>
+        <div class="question">
+          <b>[Программирование | MCQ]</b><br>
+          Что характеризует ООП?<br>
+          <small>A: только классы · B: инкапсуляция/наследование/полиморфизм · C: только рекурсия · D: отсутствие состояния</small>
+        </div>
+        <div class="question">
+          <b>[Сети | Открытый]</b><br>
+          Почему после переноса сайта DNS иногда продолжает вести на старый IP?
+        </div>
+        <div class="question">
+          <b>[БД | Мини-практика]</b><br>
+          Напишите SQL-запрос, который выводит имя студента и название его группы (таблицы students и groups).
+        </div>
+        <div class="question">
+          <b>[Веб | Анализ кода]</b><br>
+          <code>console.log(x); let x = 5;</code> — что произойдет и почему?
+        </div>
+        <div class="question">
+          <b>[Git | Ситуационный]</b><br>
+          При merge возник конфликт. Опишите правильный порядок действий до успешного коммита.
+        </div>
+        <div class="question">
+          <b>[Педагогика | Аналитический]</b><br>
+          Студенты пассивны на занятии по сетям. Предложите 2 приема активизации и как оцените эффект.
+        </div>
+      </article>
+    </section>
+
+    <section id="reports" class="grid" style="margin-top: 14px;">
+      <article class="card half">
+        <h2>Шаблон отчета кандидата</h2>
+        <ul>
+          <li>Итог: <b>__%</b> · Категория: <b>готов / условно готов / подготовка</b></li>
+          <li>Профиль по 6 блокам: сильные стороны и зоны роста.</li>
+          <li>Индивидуальный план на 2-4 недели с контрольной точкой.</li>
+          <li>Рекомендованные ресурсы: темы, практикумы, мини-курс.</li>
+        </ul>
+      </article>
+
+      <article class="card half">
+        <h2>Шаблон отчета HR/методиста</h2>
+        <ul>
+          <li>Сводка: дата, итог, риск-профиль, готовность к нагрузке.</li>
+          <li>Топ-3 дефицита и ожидаемые риски в аудитории.</li>
+          <li>Решение: допуск / допуск с наставником / дообучение.</li>
+          <li>План 30/60 дней с ответственными и датой ретеста.</li>
+        </ul>
+      </article>
+    </section>
+
+    <section id="pilot-test" class="grid" style="margin-top: 14px;">
+      <article class="card wide">
+        <div class="quiz-head">
+          <h2>Пробный тест (12 вопросов)</h2>
+          <div class="timer" id="timer">Осталось: 20:00</div>
+        </div>
+        <p class="muted">
+          Формат пилота: 1 правильный ответ в каждом вопросе. После завершения вы получите итоговый балл, категорию и рекомендации.
+        </p>
+        <div id="quiz-container"></div>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px;">
+          <button class="btn" id="start-btn">Начать тест</button>
+          <button class="btn" id="submit-btn" disabled>Завершить и проверить</button>
+          <button class="btn hidden" id="restart-btn">Пройти заново</button>
+        </div>
+        <div class="export-panel hidden" id="export-panel">
+          <button class="btn" id="export-json-btn">Экспорт JSON</button>
+          <button class="btn" id="export-csv-btn">Экспорт CSV</button>
+        </div>
+        <p class="mini hidden" id="log-note">Лог времени по каждому вопросу включен в экспорт.</p>
+        <div id="quiz-result" class="question hidden" style="margin-top: 12px;"></div>
+      </article>
+    </section>
+
+    <section id="metrics" class="grid" style="margin-top: 14px;">
+      <article class="card third">
+        <h3>Onboarding Success Rate</h3>
+        <p class="muted">% преподавателей, успешно прошедших адаптацию в срок.</p>
+      </article>
+      <article class="card third">
+        <h3>Predictive Validity</h3>
+        <p class="muted">Связь результатов теста с качеством преподавания в семестре.</p>
+      </article>
+      <article class="card third">
+        <h3>Remediation Lift</h3>
+        <p class="muted">Прирост балла между первичным тестом и ретестом.</p>
+      </article>
+      <article class="card third">
+        <h3>Time-to-Readiness</h3>
+        <p class="muted">Среднее время до самостоятельного ведения групп.</p>
+      </article>
+      <article class="card third">
+        <h3>Candidate Experience Score</h3>
+        <p class="muted">Удовлетворенность кандидатов прозрачностью и полезностью диагностики.</p>
+      </article>
+      <article class="card third">
+        <h3>Версионность контента</h3>
+        <p class="muted">Ревизия банка заданий не реже 1 раза в 6 месяцев.</p>
+      </article>
+    </section>
+
+    <p class="footer">
+      Пилотная страница: демонстрационный прототип структуры и контента.
+      Следующий шаг — подключить реальный банк вопросов и выгрузку результатов из LMS.
+    </p>
+  </main>
+  <script src="questions.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
