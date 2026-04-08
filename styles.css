@@ -210,6 +210,15 @@ th { color: #c8d7ff; font-weight: 600; }
   color: var(--muted);
 }
 
+select {
+  margin-left: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(8, 15, 33, 0.8);
+  color: var(--text);
+  padding: 6px 8px;
+}
+
 @media (max-width: 920px) {
   .kpi, .third { grid-column: span 6; }
   .half { grid-column: span 12; }

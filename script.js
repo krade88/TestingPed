@@ -11,7 +11,15 @@
   const quizContainer = document.getElementById("quiz-container");
   const resultBox = document.getElementById("quiz-result");
   const timerEl = document.getElementById("timer");
-  const limitSec = 20 * 60;
+  const specializationSelect = document.getElementById("specialization-select");
+  const fontIncBtn = document.getElementById("font-inc-btn");
+  const fontDecBtn = document.getElementById("font-dec-btn");
+  const pilotTitle = document.getElementById("pilot-title");
+  const pilotDesc = document.getElementById("pilot-desc");
+  const coreQuestionCount = 18;
+  const specializedQuestionCount = 6;
+  const limitSec = 45 * 60;
+  const autosaveKey = "it_teacher_pilot_autosave_v1";
 
   let questions = [];
   let leftSec = limitSec;
@@ -38,11 +46,20 @@
   }
 
   function buildShuffledQuestions() {
-    const shuffledQuestions = shuffle(baseQuestions).map((q, idx) => {
+    const selectedSpec = specializationSelect ? specializationSelect.value : "web";
+    const corePool = baseQuestions.filter((q) => (q.module || "core") === "core");
+    const specPool = baseQuestions.filter((q) => (q.module || "core") === selectedSpec);
+    const selectedCore = shuffle(corePool).slice(0, Math.min(coreQuestionCount, corePool.length));
+    const selectedSpecPart = shuffle(specPool).slice(0, Math.min(specializedQuestionCount, specPool.length));
+    const selected = shuffle(selectedCore.concat(selectedSpecPart));
+    const shuffledQuestions = selected.map((q, idx) => {
       const optionObjects = q.options.map((option, optionIdx) => ({ option, isAnswer: optionIdx === q.answer }));
       const mixedOptions = shuffle(optionObjects);
       return {
         id: "Q" + (idx + 1),
+        dimension: q.dimension || "Hard Skills",
+        level: q.level || "basic",
+        module: q.module || "core",
         block: q.block,
         text: q.text,
         options: mixedOptions.map((o) => o.option),
@@ -79,8 +96,64 @@
         const now = Date.now();
         questions[idx].lastChangedAtMs = now;
         questions[idx].changeCount += 1;
+        saveProgress();
       });
     });
+  }
+
+  function saveProgress() {
+    if (!started) return;
+    const selectedAnswers = questions.map((q, idx) => {
+      const picked = document.querySelector('input[name="q-' + idx + '"]:checked');
+      return picked ? Number(picked.value) : -1;
+    });
+    const payload = {
+      leftSec: leftSec,
+      sessionStartMs: sessionStartMs,
+      selectedAnswers: selectedAnswers,
+      questions: questions,
+      specialization: specializationSelect ? specializationSelect.value : "web"
+    };
+    localStorage.setItem(autosaveKey, JSON.stringify(payload));
+  }
+
+  function restoreProgress() {
+    const raw = localStorage.getItem(autosaveKey);
+    if (!raw) return false;
+    try {
+      const saved = JSON.parse(raw);
+      if (!saved || !Array.isArray(saved.questions) || !saved.questions.length) return false;
+      questions = saved.questions;
+      leftSec = typeof saved.leftSec === "number" ? saved.leftSec : limitSec;
+      sessionStartMs = typeof saved.sessionStartMs === "number" ? saved.sessionStartMs : Date.now();
+      if (specializationSelect && saved.specialization) specializationSelect.value = saved.specialization;
+      renderQuestions();
+      if (Array.isArray(saved.selectedAnswers)) {
+        saved.selectedAnswers.forEach((val, idx) => {
+          if (typeof val === "number" && val >= 0) {
+            const radio = document.querySelector('input[name="q-' + idx + '"][value="' + val + '"]');
+            if (radio) radio.checked = true;
+          }
+        });
+      }
+      started = true;
+      startBtn.disabled = true;
+      submitBtn.disabled = false;
+      restartBtn.classList.add("hidden");
+      exportPanel.classList.add("hidden");
+      logNote.classList.add("hidden");
+      timerEl.textContent = "Осталось: " + formatTime(leftSec);
+      timerId = setInterval(() => {
+        leftSec -= 1;
+        timerEl.textContent = "Осталось: " + formatTime(Math.max(leftSec, 0));
+        saveProgress();
+        if (leftSec <= 0) finishQuiz(true);
+      }, 1000);
+      return true;
+    } catch (e) {
+      localStorage.removeItem(autosaveKey);
+      return false;
+    }
   }
 
   function getCategory(percent) {
@@ -112,10 +185,13 @@
       ["spent_seconds_total", String(payload.spentSecondsTotal)],
       []
     ];
-    rows.push(["question_id", "block", "question", "selected_option", "correct_option", "is_correct", "time_to_answer_sec", "answer_change_count"]);
+    rows.push(["question_id", "dimension", "level", "module", "block", "question", "selected_option", "correct_option", "is_correct", "time_to_answer_sec", "answer_change_count"]);
     payload.questions.forEach((q) => {
       rows.push([
         q.id,
+        q.dimension,
+        q.level,
+        q.module,
         q.block,
         q.text,
         q.selectedOptionText,
@@ -135,9 +211,12 @@
 
     let correct = 0;
     const byBlock = {};
+    const byDimension = {};
     questions.forEach((q) => {
       byBlock[q.block] = byBlock[q.block] || { ok: 0, total: 0 };
       byBlock[q.block].total += 1;
+      byDimension[q.dimension] = byDimension[q.dimension] || { ok: 0, total: 0 };
+      byDimension[q.dimension].total += 1;
     });
 
     const questionLogs = questions.map((q, idx) => {
@@ -147,11 +226,15 @@
       if (isCorrect) {
         correct += 1;
         byBlock[q.block].ok += 1;
+        byDimension[q.dimension].ok += 1;
       }
       const answerAt = q.lastChangedAtMs || Date.now();
       const timeToAnswerSec = Math.max(0, Math.round((answerAt - q.renderedAtMs) / 1000));
       return {
         id: q.id,
+        dimension: q.dimension,
+        level: q.level,
+        module: q.module,
         block: q.block,
         text: q.text,
         selectedOptionIndex: selectedOptionIndex,
@@ -170,6 +253,22 @@
       const p = Math.round((byBlock[block].ok / byBlock[block].total) * 100);
       return "<li>" + block + ": " + byBlock[block].ok + "/" + byBlock[block].total + " (" + p + "%)</li>";
     }).join("");
+    const detailsByDimension = Object.keys(byDimension).map((dimension) => {
+      const p = Math.round((byDimension[dimension].ok / byDimension[dimension].total) * 100);
+      return "<li>" + dimension + ": " + byDimension[dimension].ok + "/" + byDimension[dimension].total + " (" + p + "%)</li>";
+    }).join("");
+    const weakestBlocks = Object.keys(byBlock)
+      .map((block) => {
+        const p = Math.round((byBlock[block].ok / byBlock[block].total) * 100);
+        return { block: block, score: p };
+      })
+      .sort((a, b) => a.score - b.score)
+      .slice(0, 3);
+    const planText = weakestBlocks.map((item, idx) => {
+      if (idx === 0) return "30 дней: закрыть базовые пробелы по блоку '" + item.block + "' (чек-лист + 2 практики).";
+      if (idx === 1) return "60 дней: провести пробное занятие с наставником по блоку '" + item.block + "'.";
+      return "90 дней: повторная диагностика и корректировка методической траектории по блоку '" + item.block + "'.";
+    }).join("<br>");
 
     const completedAt = new Date().toISOString();
     const spentSecondsTotal = Math.round((Date.now() - sessionStartMs) / 1000);
@@ -183,15 +282,20 @@
       category: category.label,
       spentSecondsTotal: spentSecondsTotal,
       byBlock: byBlock,
+      byDimension: byDimension,
       questions: questionLogs
     };
+    localStorage.removeItem(autosaveKey);
 
     resultBox.className = "question";
     resultBox.innerHTML =
       "<b>Результат: " + correct + "/" + questions.length + " (" + percent + "%)</b><br>" +
       'Категория: <span class="' + category.cls + '"><b>' + category.label + "</b></span><br>" +
       (auto ? "<small>Тест завершен автоматически по таймеру.</small><br>" : "") +
-      "<ul>" + details + "</ul>" +
+      "<b>Карта компетенций (3 измерения):</b><ul>" + detailsByDimension + "</ul>" +
+      "<b>Детализация по блокам:</b><ul>" + details + "</ul>" +
+      "<b>План адаптации 30-60-90:</b><br>" + planText + "<br>" +
+      "<small>Рекомендована пересдача после периода подготовки.</small><br>" +
       "<b>Рекомендация:</b> " + category.tip;
 
     submitBtn.disabled = true;
@@ -209,6 +313,9 @@
       id: q.id,
       block: q.block,
       text: q.text,
+      dimension: q.dimension,
+      level: q.level,
+      module: q.module,
       options: q.options,
       answer: q.answer,
       renderedAtMs: Date.now(),
@@ -232,8 +339,10 @@
     timerId = setInterval(() => {
       leftSec -= 1;
       timerEl.textContent = "Осталось: " + formatTime(Math.max(leftSec, 0));
+      saveProgress();
       if (leftSec <= 0) finishQuiz(true);
     }, 1000);
+    saveProgress();
   }
 
   startBtn.addEventListener("click", startQuiz);
@@ -246,10 +355,11 @@
     quizContainer.innerHTML = "";
     resultBox.className = "question hidden";
     resultBox.innerHTML = "";
-    timerEl.textContent = "Осталось: 20:00";
+    timerEl.textContent = "Осталось: " + formatTime(limitSec);
     resultPayload = null;
     exportPanel.classList.add("hidden");
     logNote.classList.add("hidden");
+    localStorage.removeItem(autosaveKey);
   });
   exportJsonBtn.addEventListener("click", function () {
     if (!resultPayload) return;
@@ -260,4 +370,26 @@
     const csv = toCsvRows(resultPayload);
     downloadFile("pilot-test-result.csv", csv, "text/csv;charset=utf-8");
   });
+
+  if (pilotTitle) {
+    pilotTitle.textContent = "Пробный тест (база + специализация)";
+  }
+  if (pilotDesc) {
+    pilotDesc.textContent = "Формат пилота: объективные MCQ и прикладные кейсы. После завершения вы получите карту компетенций, план 30-60-90 и рекомендации.";
+  }
+  timerEl.textContent = "Осталось: " + formatTime(limitSec);
+
+  if (fontIncBtn) {
+    fontIncBtn.addEventListener("click", function () {
+      const current = parseFloat(getComputedStyle(document.body).fontSize);
+      document.body.style.fontSize = Math.min(current + 1, 22) + "px";
+    });
+  }
+  if (fontDecBtn) {
+    fontDecBtn.addEventListener("click", function () {
+      const current = parseFloat(getComputedStyle(document.body).fontSize);
+      document.body.style.fontSize = Math.max(current - 1, 14) + "px";
+    });
+  }
+  restoreProgress();
 })();
