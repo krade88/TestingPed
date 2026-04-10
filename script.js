@@ -11,13 +11,10 @@
   const quizContainer = document.getElementById("quiz-container");
   const resultBox = document.getElementById("quiz-result");
   const timerEl = document.getElementById("timer");
-  const specializationSelect = document.getElementById("specialization-select");
   const fontIncBtn = document.getElementById("font-inc-btn");
   const fontDecBtn = document.getElementById("font-dec-btn");
   const pilotTitle = document.getElementById("pilot-title");
   const pilotDesc = document.getElementById("pilot-desc");
-  const coreQuestionCount = 18;
-  const specializedQuestionCount = 6;
   const limitSec = 45 * 60;
   const autosaveKey = "it_teacher_pilot_autosave_v1";
 
@@ -46,13 +43,7 @@
   }
 
   function buildShuffledQuestions() {
-    const selectedSpec = specializationSelect ? specializationSelect.value : "web";
-    const corePool = baseQuestions.filter((q) => (q.module || "core") === "core");
-    const specPool = baseQuestions.filter((q) => (q.module || "core") === selectedSpec);
-    const selectedCore = shuffle(corePool).slice(0, Math.min(coreQuestionCount, corePool.length));
-    const selectedSpecPart = shuffle(specPool).slice(0, Math.min(specializedQuestionCount, specPool.length));
-    const selected = shuffle(selectedCore.concat(selectedSpecPart));
-    const shuffledQuestions = selected.map((q, idx) => {
+    const shuffledQuestions = baseQuestions.map((q, idx) => {
       const optionObjects = q.options.map((option, optionIdx) => ({ option, isAnswer: optionIdx === q.answer }));
       const mixedOptions = shuffle(optionObjects);
       return {
@@ -60,6 +51,9 @@
         dimension: q.dimension || "Hard Skills",
         level: q.level || "basic",
         module: q.module || "core",
+        kind: q.kind || "single",
+        match: Array.isArray(q.match) ? q.match : null,
+        media: Array.isArray(q.media) ? q.media : null,
         block: q.block,
         text: q.text,
         options: mixedOptions.map((o) => o.option),
@@ -71,27 +65,65 @@
 
   function renderQuestions() {
     quizContainer.innerHTML = questions.map((q, idx) => {
-      const optionsHtml = q.options.map((option, optionIdx) => (
-        '<label class="option-label">' +
-          '<input type="radio" name="q-' + idx + '" value="' + optionIdx + '">' +
-          "<span>" + option + "</span>" +
-        "</label>"
-      )).join("");
+      const mediaHtml = Array.isArray(q.media) && q.media.length
+        ? (
+          '<div class="question-media-grid">' +
+            q.media.map((m) => (
+              '<figure class="question-media-item">' +
+                '<figcaption>' + (m.label || "") + "</figcaption>" +
+                '<img src="' + m.src + '" alt="' + (m.alt || "") + '">' +
+              "</figure>"
+            )).join("") +
+          "</div>"
+        )
+        : "";
+      let optionsHtml = "";
+      if (q.kind === "matching" && Array.isArray(q.match) && q.match.length) {
+        const rightItems = shuffle(q.match.map((pair) => pair.right));
+        optionsHtml = q.match.map((pair, pairIdx) => {
+          const selectOptions = ['<option value="">Выберите соответствие</option>']
+            .concat(rightItems.map((item) => '<option value="' + item + '">' + item + "</option>"))
+            .join("");
+          return (
+            '<div class="matching-row">' +
+              '<div class="matching-left">' + pair.left + "</div>" +
+              '<div class="matching-arrow">→</div>' +
+              '<select class="matching-select" data-match="1" data-question-index="' + idx + '" data-pair-index="' + pairIdx + '">' +
+                selectOptions +
+              "</select>" +
+            "</div>"
+          );
+        }).join("");
+      } else {
+        optionsHtml = q.options.map((option, optionIdx) => (
+          '<label class="option-label">' +
+            '<input type="radio" name="q-' + idx + '" value="' + optionIdx + '">' +
+            "<span>" + option + "</span>" +
+          "</label>"
+        )).join("");
+      }
       return (
         '<div class="question" data-question-index="' + idx + '">' +
-          "<b>" + (idx + 1) + ". [" + q.block + "]</b><br>" +
+          (q.kind === "matching" ? '<span class="pill kind-pill">Сопоставление</span><br>' : "") +
+          "<b>" + (idx + 1) + ".</b><br>" +
           "<span>" + q.text + "</span>" +
+          mediaHtml +
           '<div class="options">' + optionsHtml + "</div>" +
         "</div>"
       );
     }).join("");
 
-    const radios = quizContainer.querySelectorAll("input[type='radio']");
-    radios.forEach((radio) => {
-      radio.addEventListener("change", function (event) {
+    const controls = quizContainer.querySelectorAll("input[type='radio'], select[data-match='1']");
+    controls.forEach((control) => {
+      control.addEventListener("change", function (event) {
         const target = event.target;
-        const name = target.name || "";
-        const idx = Number(name.replace("q-", ""));
+        let idx = -1;
+        if (target.getAttribute("data-match") === "1") {
+          idx = Number(target.getAttribute("data-question-index"));
+        } else {
+          const name = target.name || "";
+          idx = Number(name.replace("q-", ""));
+        }
         if (Number.isNaN(idx)) return;
         const now = Date.now();
         questions[idx].lastChangedAtMs = now;
@@ -104,6 +136,12 @@
   function saveProgress() {
     if (!started) return;
     const selectedAnswers = questions.map((q, idx) => {
+      if (q.kind === "matching" && Array.isArray(q.match)) {
+        return q.match.map(function (_, pairIdx) {
+          const select = document.querySelector('select[data-match="1"][data-question-index="' + idx + '"][data-pair-index="' + pairIdx + '"]');
+          return select ? String(select.value || "") : "";
+        });
+      }
       const picked = document.querySelector('input[name="q-' + idx + '"]:checked');
       return picked ? Number(picked.value) : -1;
     });
@@ -111,8 +149,7 @@
       leftSec: leftSec,
       sessionStartMs: sessionStartMs,
       selectedAnswers: selectedAnswers,
-      questions: questions,
-      specialization: specializationSelect ? specializationSelect.value : "web"
+      questions: questions
     };
     localStorage.setItem(autosaveKey, JSON.stringify(payload));
   }
@@ -126,10 +163,18 @@
       questions = saved.questions;
       leftSec = typeof saved.leftSec === "number" ? saved.leftSec : limitSec;
       sessionStartMs = typeof saved.sessionStartMs === "number" ? saved.sessionStartMs : Date.now();
-      if (specializationSelect && saved.specialization) specializationSelect.value = saved.specialization;
       renderQuestions();
       if (Array.isArray(saved.selectedAnswers)) {
         saved.selectedAnswers.forEach((val, idx) => {
+          const question = questions[idx];
+          if (!question) return;
+          if (question.kind === "matching" && Array.isArray(question.match) && Array.isArray(val)) {
+            val.forEach(function (pickedValue, pairIdx) {
+              const select = document.querySelector('select[data-match="1"][data-question-index="' + idx + '"][data-pair-index="' + pairIdx + '"]');
+              if (select && typeof pickedValue === "string") select.value = pickedValue;
+            });
+            return;
+          }
           if (typeof val === "number" && val >= 0) {
             const radio = document.querySelector('input[name="q-' + idx + '"][value="' + val + '"]');
             if (radio) radio.checked = true;
@@ -220,9 +265,30 @@
     });
 
     const questionLogs = questions.map((q, idx) => {
-      const picked = document.querySelector('input[name="q-' + idx + '"]:checked');
-      const selectedOptionIndex = picked ? Number(picked.value) : -1;
-      const isCorrect = selectedOptionIndex === q.answer;
+      let selectedOptionIndex = -1;
+      let selectedOptionText = "";
+      let correctOptionText = q.options[q.answer];
+      let isCorrect = false;
+
+      if (q.kind === "matching" && Array.isArray(q.match)) {
+        const selectedPairs = q.match.map(function (_, pairIdx) {
+          const select = document.querySelector('select[data-match="1"][data-question-index="' + idx + '"][data-pair-index="' + pairIdx + '"]');
+          return select ? String(select.value || "") : "";
+        });
+        isCorrect = selectedPairs.every(function (val, pairIdx) { return val === q.match[pairIdx].right; });
+        selectedOptionText = selectedPairs.map(function (val, pairIdx) {
+          return q.match[pairIdx].left + " -> " + (val || "—");
+        }).join(" | ");
+        correctOptionText = q.match.map(function (pair) {
+          return pair.left + " -> " + pair.right;
+        }).join(" | ");
+      } else {
+        const picked = document.querySelector('input[name="q-' + idx + '"]:checked');
+        selectedOptionIndex = picked ? Number(picked.value) : -1;
+        isCorrect = selectedOptionIndex === q.answer;
+        selectedOptionText = selectedOptionIndex >= 0 ? q.options[selectedOptionIndex] : "";
+      }
+
       if (isCorrect) {
         correct += 1;
         byBlock[q.block].ok += 1;
@@ -238,9 +304,9 @@
         block: q.block,
         text: q.text,
         selectedOptionIndex: selectedOptionIndex,
-        selectedOptionText: selectedOptionIndex >= 0 ? q.options[selectedOptionIndex] : "",
+        selectedOptionText: selectedOptionText,
         correctOptionIndex: q.answer,
-        correctOptionText: q.options[q.answer],
+        correctOptionText: correctOptionText,
         isCorrect: isCorrect,
         timeToAnswerSec: timeToAnswerSec,
         answerChangeCount: q.changeCount
@@ -316,6 +382,9 @@
       dimension: q.dimension,
       level: q.level,
       module: q.module,
+      kind: q.kind,
+      match: q.match,
+      media: q.media,
       options: q.options,
       answer: q.answer,
       renderedAtMs: Date.now(),
@@ -372,7 +441,7 @@
   });
 
   if (pilotTitle) {
-    pilotTitle.textContent = "Пробный тест (база + специализация)";
+    pilotTitle.textContent = "Пробный тест (единый список вопросов)";
   }
   if (pilotDesc) {
     pilotDesc.textContent = "Формат пилота: объективные MCQ и прикладные кейсы. После завершения вы получите карту компетенций, план 30-60-90 и рекомендации.";
