@@ -42,6 +42,13 @@
     return copy;
   }
 
+  function normalizeText(value) {
+    return String(value || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ");
+  }
+
   function buildShuffledQuestions() {
     const shuffledQuestions = baseQuestions.map((q, idx) => {
       const optionObjects = q.options.map((option, optionIdx) => ({ option, isAnswer: optionIdx === q.answer }));
@@ -54,6 +61,7 @@
         kind: q.kind || "single",
         match: Array.isArray(q.match) ? q.match : null,
         media: Array.isArray(q.media) ? q.media : null,
+        acceptedAnswers: Array.isArray(q.acceptedAnswers) ? q.acceptedAnswers : null,
         block: q.block,
         text: q.text,
         options: mixedOptions.map((o) => o.option),
@@ -94,6 +102,18 @@
             "</div>"
           );
         }).join("");
+      } else if (q.kind === "open") {
+        optionsHtml =
+          '<label class="open-answer-label">' +
+            '<span class="mini">Введите развернутый ответ:</span>' +
+            '<textarea class="open-answer-input" data-open="1" data-question-index="' + idx + '" rows="4" placeholder="Введите ваш ответ..."></textarea>' +
+          "</label>";
+      } else if (q.kind === "fill_blank") {
+        optionsHtml =
+          '<label class="open-answer-label">' +
+            '<span class="mini">Впишите термин:</span>' +
+            '<input class="fill-blank-input" data-fill="1" data-question-index="' + idx + '" type="text" placeholder="Введите ответ">' +
+          "</label>";
       } else {
         optionsHtml = q.options.map((option, optionIdx) => (
           '<label class="option-label">' +
@@ -105,6 +125,8 @@
       return (
         '<div class="question" data-question-index="' + idx + '">' +
           (q.kind === "matching" ? '<span class="pill kind-pill">Сопоставление</span><br>' : "") +
+          (q.kind === "open" ? '<span class="pill kind-pill">Открытый ответ</span><br>' : "") +
+          (q.kind === "fill_blank" ? '<span class="pill kind-pill">Заполнить поле</span><br>' : "") +
           "<b>" + (idx + 1) + ".</b><br>" +
           "<span>" + q.text + "</span>" +
           mediaHtml +
@@ -113,12 +135,15 @@
       );
     }).join("");
 
-    const controls = quizContainer.querySelectorAll("input[type='radio'], select[data-match='1']");
+    const controls = quizContainer.querySelectorAll("input[type='radio'], select[data-match='1'], textarea[data-open='1'], input[data-fill='1']");
     controls.forEach((control) => {
-      control.addEventListener("change", function (event) {
+      const eventName = control.tagName === "TEXTAREA" || targetIsTextInput(control) ? "input" : "change";
+      control.addEventListener(eventName, function (event) {
         const target = event.target;
         let idx = -1;
         if (target.getAttribute("data-match") === "1") {
+          idx = Number(target.getAttribute("data-question-index"));
+        } else if (target.getAttribute("data-open") === "1" || target.getAttribute("data-fill") === "1") {
           idx = Number(target.getAttribute("data-question-index"));
         } else {
           const name = target.name || "";
@@ -133,6 +158,10 @@
     });
   }
 
+  function targetIsTextInput(control) {
+    return control.tagName === "INPUT" && (control.getAttribute("data-fill") === "1");
+  }
+
   function saveProgress() {
     if (!started) return;
     const selectedAnswers = questions.map((q, idx) => {
@@ -141,6 +170,14 @@
           const select = document.querySelector('select[data-match="1"][data-question-index="' + idx + '"][data-pair-index="' + pairIdx + '"]');
           return select ? String(select.value || "") : "";
         });
+      }
+      if (q.kind === "open") {
+        const textarea = document.querySelector('textarea[data-open="1"][data-question-index="' + idx + '"]');
+        return textarea ? String(textarea.value || "") : "";
+      }
+      if (q.kind === "fill_blank") {
+        const input = document.querySelector('input[data-fill="1"][data-question-index="' + idx + '"]');
+        return input ? String(input.value || "") : "";
       }
       const picked = document.querySelector('input[name="q-' + idx + '"]:checked');
       return picked ? Number(picked.value) : -1;
@@ -173,6 +210,16 @@
               const select = document.querySelector('select[data-match="1"][data-question-index="' + idx + '"][data-pair-index="' + pairIdx + '"]');
               if (select && typeof pickedValue === "string") select.value = pickedValue;
             });
+            return;
+          }
+          if (question.kind === "open" && typeof val === "string") {
+            const textarea = document.querySelector('textarea[data-open="1"][data-question-index="' + idx + '"]');
+            if (textarea) textarea.value = val;
+            return;
+          }
+          if (question.kind === "fill_blank" && typeof val === "string") {
+            const input = document.querySelector('input[data-fill="1"][data-question-index="' + idx + '"]');
+            if (input) input.value = val;
             return;
           }
           if (typeof val === "number" && val >= 0) {
@@ -255,13 +302,22 @@
     started = false;
 
     let correct = 0;
+    let autoGradableTotal = 0;
+    let manualQuestionsCount = 0;
     const byBlock = {};
     const byDimension = {};
     questions.forEach((q) => {
-      byBlock[q.block] = byBlock[q.block] || { ok: 0, total: 0 };
-      byBlock[q.block].total += 1;
-      byDimension[q.dimension] = byDimension[q.dimension] || { ok: 0, total: 0 };
-      byDimension[q.dimension].total += 1;
+      byBlock[q.block] = byBlock[q.block] || { ok: 0, total: 0, manual: 0 };
+      byDimension[q.dimension] = byDimension[q.dimension] || { ok: 0, total: 0, manual: 0 };
+      if (q.kind === "open") {
+        byBlock[q.block].manual += 1;
+        byDimension[q.dimension].manual += 1;
+        manualQuestionsCount += 1;
+      } else {
+        byBlock[q.block].total += 1;
+        byDimension[q.dimension].total += 1;
+        autoGradableTotal += 1;
+      }
     });
 
     const questionLogs = questions.map((q, idx) => {
@@ -269,6 +325,7 @@
       let selectedOptionText = "";
       let correctOptionText = q.options[q.answer];
       let isCorrect = false;
+      let requiresManualReview = false;
 
       if (q.kind === "matching" && Array.isArray(q.match)) {
         const selectedPairs = q.match.map(function (_, pairIdx) {
@@ -282,6 +339,19 @@
         correctOptionText = q.match.map(function (pair) {
           return pair.left + " -> " + pair.right;
         }).join(" | ");
+      } else if (q.kind === "fill_blank") {
+        const input = document.querySelector('input[data-fill="1"][data-question-index="' + idx + '"]');
+        const userValue = input ? String(input.value || "") : "";
+        selectedOptionText = userValue;
+        const normalizedUserValue = normalizeText(userValue);
+        const accepted = Array.isArray(q.acceptedAnswers) ? q.acceptedAnswers : [];
+        isCorrect = accepted.map(normalizeText).includes(normalizedUserValue);
+        correctOptionText = accepted.join(" / ");
+      } else if (q.kind === "open") {
+        const textarea = document.querySelector('textarea[data-open="1"][data-question-index="' + idx + '"]');
+        selectedOptionText = textarea ? String(textarea.value || "") : "";
+        correctOptionText = "Ручная проверка";
+        requiresManualReview = true;
       } else {
         const picked = document.querySelector('input[name="q-' + idx + '"]:checked');
         selectedOptionIndex = picked ? Number(picked.value) : -1;
@@ -307,25 +377,32 @@
         selectedOptionText: selectedOptionText,
         correctOptionIndex: q.answer,
         correctOptionText: correctOptionText,
-        isCorrect: isCorrect,
+        isCorrect: requiresManualReview ? null : isCorrect,
+        requiresManualReview: requiresManualReview,
         timeToAnswerSec: timeToAnswerSec,
         answerChangeCount: q.changeCount
       };
     });
 
-    const percent = Math.round((correct / questions.length) * 100);
+    const percent = autoGradableTotal > 0 ? Math.round((correct / autoGradableTotal) * 100) : 0;
     const category = getCategory(percent);
     const details = Object.keys(byBlock).map((block) => {
-      const p = Math.round((byBlock[block].ok / byBlock[block].total) * 100);
-      return "<li>" + block + ": " + byBlock[block].ok + "/" + byBlock[block].total + " (" + p + "%)</li>";
+      if (byBlock[block].total > 0) {
+        const p = Math.round((byBlock[block].ok / byBlock[block].total) * 100);
+        return "<li>" + block + ": " + byBlock[block].ok + "/" + byBlock[block].total + " (" + p + "%)" + (byBlock[block].manual > 0 ? ", открытые: " + byBlock[block].manual : "") + "</li>";
+      }
+      return "<li>" + block + ": автопроверка не применяется, открытые: " + byBlock[block].manual + "</li>";
     }).join("");
     const detailsByDimension = Object.keys(byDimension).map((dimension) => {
-      const p = Math.round((byDimension[dimension].ok / byDimension[dimension].total) * 100);
-      return "<li>" + dimension + ": " + byDimension[dimension].ok + "/" + byDimension[dimension].total + " (" + p + "%)</li>";
+      if (byDimension[dimension].total > 0) {
+        const p = Math.round((byDimension[dimension].ok / byDimension[dimension].total) * 100);
+        return "<li>" + dimension + ": " + byDimension[dimension].ok + "/" + byDimension[dimension].total + " (" + p + "%)" + (byDimension[dimension].manual > 0 ? ", открытые: " + byDimension[dimension].manual : "") + "</li>";
+      }
+      return "<li>" + dimension + ": автопроверка не применяется, открытые: " + byDimension[dimension].manual + "</li>";
     }).join("");
     const weakestBlocks = Object.keys(byBlock)
       .map((block) => {
-        const p = Math.round((byBlock[block].ok / byBlock[block].total) * 100);
+        const p = byBlock[block].total > 0 ? Math.round((byBlock[block].ok / byBlock[block].total) * 100) : 100;
         return { block: block, score: p };
       })
       .sort((a, b) => a.score - b.score)
@@ -343,6 +420,8 @@
       completedAt: completedAt,
       autoCompleted: auto,
       totalQuestions: questions.length,
+      autoGradableQuestions: autoGradableTotal,
+      manualReviewQuestions: manualQuestionsCount,
       correctAnswers: correct,
       scorePercent: percent,
       category: category.label,
@@ -355,7 +434,8 @@
 
     resultBox.className = "question";
     resultBox.innerHTML =
-      "<b>Результат: " + correct + "/" + questions.length + " (" + percent + "%)</b><br>" +
+      "<b>Результат автопроверки: " + correct + "/" + autoGradableTotal + " (" + percent + "%)</b><br>" +
+      (manualQuestionsCount > 0 ? "<small>Открытые ответы для ручной проверки: " + manualQuestionsCount + ".</small><br>" : "") +
       'Категория: <span class="' + category.cls + '"><b>' + category.label + "</b></span><br>" +
       (auto ? "<small>Тест завершен автоматически по таймеру.</small><br>" : "") +
       "<b>Карта компетенций (3 измерения):</b><ul>" + detailsByDimension + "</ul>" +
@@ -385,6 +465,7 @@
       kind: q.kind,
       match: q.match,
       media: q.media,
+      acceptedAnswers: q.acceptedAnswers,
       options: q.options,
       answer: q.answer,
       renderedAtMs: Date.now(),

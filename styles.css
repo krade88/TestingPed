@@ -257,6 +257,25 @@ th { color: #c8d7ff; font-weight: 600; }
   margin-left: 0;
   width: 100%;
 }
+.open-answer-label {
+  display: grid;
+  gap: 6px;
+}
+.open-answer-input,
+.fill-blank-input {
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(8, 15, 33, 0.8);
+  color: var(--text);
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 0.95rem;
+}
+.open-answer-input {
+  resize: vertical;
+  min-height: 92px;
+}
 .hidden { display: none; }
 .export-panel {
   margin-top: 10px;
