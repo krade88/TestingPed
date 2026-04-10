@@ -51,6 +51,23 @@
 
   function buildShuffledQuestions() {
     const shuffledQuestions = baseQuestions.map((q, idx) => {
+      if (q.kind === "sequence" && Array.isArray(q.sequence) && q.sequence.length) {
+        return {
+          id: "Q" + (idx + 1),
+          dimension: q.dimension || "Hard Skills",
+          level: q.level || "basic",
+          module: q.module || "core",
+          kind: q.kind || "single",
+          match: Array.isArray(q.match) ? q.match : null,
+          media: Array.isArray(q.media) ? q.media : null,
+          acceptedAnswers: Array.isArray(q.acceptedAnswers) ? q.acceptedAnswers : null,
+          sequence: q.sequence.slice(),
+          block: q.block,
+          text: q.text,
+          options: Array.isArray(q.options) && q.options.length ? q.options.slice() : q.sequence.slice(),
+          answer: -1
+        };
+      }
       const optionObjects = q.options.map((option, optionIdx) => ({ option, isAnswer: optionIdx === q.answer }));
       const mixedOptions = shuffle(optionObjects);
       return {
@@ -62,6 +79,7 @@
         match: Array.isArray(q.match) ? q.match : null,
         media: Array.isArray(q.media) ? q.media : null,
         acceptedAnswers: Array.isArray(q.acceptedAnswers) ? q.acceptedAnswers : null,
+        sequence: Array.isArray(q.sequence) ? q.sequence.slice() : null,
         block: q.block,
         text: q.text,
         options: mixedOptions.map((o) => o.option),
@@ -114,6 +132,23 @@
             '<span class="mini">Впишите термин:</span>' +
             '<input class="fill-blank-input" data-fill="1" data-question-index="' + idx + '" type="text" placeholder="Введите ответ">' +
           "</label>";
+      } else if (q.kind === "sequence" && Array.isArray(q.sequence) && q.sequence.length) {
+        const source = Array.isArray(q.options) && q.options.length ? q.options.slice() : q.sequence.slice();
+        const pool = shuffle(source);
+        optionsHtml = q.sequence.map(function (_, seqIdx) {
+          const selectOptions = ['<option value="">Выберите элемент</option>']
+            .concat(pool.map((item) => '<option value="' + item + '">' + item + "</option>"))
+            .join("");
+          return (
+            '<div class="matching-row">' +
+              '<div class="matching-left">Позиция ' + (seqIdx + 1) + "</div>" +
+              '<div class="matching-arrow">→</div>' +
+              '<select class="matching-select" data-sequence="1" data-question-index="' + idx + '" data-seq-index="' + seqIdx + '">' +
+                selectOptions +
+              "</select>" +
+            "</div>"
+          );
+        }).join("");
       } else {
         optionsHtml = q.options.map((option, optionIdx) => (
           '<label class="option-label">' +
@@ -127,6 +162,7 @@
           (q.kind === "matching" ? '<span class="pill kind-pill">Сопоставление</span><br>' : "") +
           (q.kind === "open" ? '<span class="pill kind-pill">Открытый ответ</span><br>' : "") +
           (q.kind === "fill_blank" ? '<span class="pill kind-pill">Заполнить поле</span><br>' : "") +
+          (q.kind === "sequence" && Array.isArray(q.sequence) && q.sequence.length ? '<span class="pill kind-pill">Последовательность</span><br>' : "") +
           "<b>" + (idx + 1) + ".</b><br>" +
           "<span>" + q.text + "</span>" +
           mediaHtml +
@@ -135,13 +171,15 @@
       );
     }).join("");
 
-    const controls = quizContainer.querySelectorAll("input[type='radio'], select[data-match='1'], textarea[data-open='1'], input[data-fill='1']");
+    const controls = quizContainer.querySelectorAll("input[type='radio'], select[data-match='1'], select[data-sequence='1'], textarea[data-open='1'], input[data-fill='1']");
     controls.forEach((control) => {
       const eventName = control.tagName === "TEXTAREA" || targetIsTextInput(control) ? "input" : "change";
       control.addEventListener(eventName, function (event) {
         const target = event.target;
         let idx = -1;
         if (target.getAttribute("data-match") === "1") {
+          idx = Number(target.getAttribute("data-question-index"));
+        } else if (target.getAttribute("data-sequence") === "1") {
           idx = Number(target.getAttribute("data-question-index"));
         } else if (target.getAttribute("data-open") === "1" || target.getAttribute("data-fill") === "1") {
           idx = Number(target.getAttribute("data-question-index"));
@@ -168,6 +206,12 @@
       if (q.kind === "matching" && Array.isArray(q.match)) {
         return q.match.map(function (_, pairIdx) {
           const select = document.querySelector('select[data-match="1"][data-question-index="' + idx + '"][data-pair-index="' + pairIdx + '"]');
+          return select ? String(select.value || "") : "";
+        });
+      }
+      if (q.kind === "sequence" && Array.isArray(q.sequence)) {
+        return q.sequence.map(function (_, seqIdx) {
+          const select = document.querySelector('select[data-sequence="1"][data-question-index="' + idx + '"][data-seq-index="' + seqIdx + '"]');
           return select ? String(select.value || "") : "";
         });
       }
@@ -208,6 +252,13 @@
           if (question.kind === "matching" && Array.isArray(question.match) && Array.isArray(val)) {
             val.forEach(function (pickedValue, pairIdx) {
               const select = document.querySelector('select[data-match="1"][data-question-index="' + idx + '"][data-pair-index="' + pairIdx + '"]');
+              if (select && typeof pickedValue === "string") select.value = pickedValue;
+            });
+            return;
+          }
+          if (question.kind === "sequence" && Array.isArray(question.sequence) && Array.isArray(val)) {
+            val.forEach(function (pickedValue, seqIdx) {
+              const select = document.querySelector('select[data-sequence="1"][data-question-index="' + idx + '"][data-seq-index="' + seqIdx + '"]');
               if (select && typeof pickedValue === "string") select.value = pickedValue;
             });
             return;
@@ -339,6 +390,18 @@
         correctOptionText = q.match.map(function (pair) {
           return pair.left + " -> " + pair.right;
         }).join(" | ");
+      } else if (q.kind === "sequence" && Array.isArray(q.sequence)) {
+        const selectedSequence = q.sequence.map(function (_, seqIdx) {
+          const select = document.querySelector('select[data-sequence="1"][data-question-index="' + idx + '"][data-seq-index="' + seqIdx + '"]');
+          return select ? String(select.value || "") : "";
+        });
+        isCorrect = selectedSequence.every(function (val, seqIdx) { return val === q.sequence[seqIdx]; });
+        selectedOptionText = selectedSequence.map(function (val, seqIdx) {
+          return (seqIdx + 1) + ") " + (val || "—");
+        }).join(" | ");
+        correctOptionText = q.sequence.map(function (item, seqIdx) {
+          return (seqIdx + 1) + ") " + item;
+        }).join(" | ");
       } else if (q.kind === "fill_blank") {
         const input = document.querySelector('input[data-fill="1"][data-question-index="' + idx + '"]');
         const userValue = input ? String(input.value || "") : "";
@@ -466,6 +529,7 @@
       match: q.match,
       media: q.media,
       acceptedAnswers: q.acceptedAnswers,
+      sequence: q.sequence,
       options: q.options,
       answer: q.answer,
       renderedAtMs: Date.now(),
