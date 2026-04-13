@@ -68,8 +68,14 @@
           answer: -1
         };
       }
-      const optionObjects = q.options.map((option, optionIdx) => ({ option, isAnswer: optionIdx === q.answer }));
+      const answerIndexes = Array.isArray(q.answer) ? q.answer : [q.answer];
+      const optionObjects = q.options.map((option, optionIdx) => ({ option, isAnswer: answerIndexes.includes(optionIdx) }));
       const mixedOptions = shuffle(optionObjects);
+      const mixedAnswer = q.kind === "multi"
+        ? mixedOptions
+          .map((o, mixedIdx) => (o.isAnswer ? mixedIdx : -1))
+          .filter((idx2) => idx2 >= 0)
+        : mixedOptions.findIndex((o) => o.isAnswer);
       return {
         id: "Q" + (idx + 1),
         dimension: q.dimension || "Hard Skills",
@@ -83,7 +89,7 @@
         block: q.block,
         text: q.text,
         options: mixedOptions.map((o) => o.option),
-        answer: mixedOptions.findIndex((o) => o.isAnswer)
+        answer: mixedAnswer
       };
     });
     return shuffledQuestions;
@@ -149,6 +155,13 @@
             "</div>"
           );
         }).join("");
+      } else if (q.kind === "multi") {
+        optionsHtml = q.options.map((option, optionIdx) => (
+          '<label class="option-label">' +
+            '<input type="checkbox" name="q-' + idx + '" value="' + optionIdx + '">' +
+            "<span>" + option + "</span>" +
+          "</label>"
+        )).join("");
       } else {
         optionsHtml = q.options.map((option, optionIdx) => (
           '<label class="option-label">' +
@@ -163,6 +176,7 @@
           (q.kind === "open" ? '<span class="pill kind-pill">Открытый ответ</span><br>' : "") +
           (q.kind === "fill_blank" ? '<span class="pill kind-pill">Заполнить поле</span><br>' : "") +
           (q.kind === "sequence" && Array.isArray(q.sequence) && q.sequence.length ? '<span class="pill kind-pill">Последовательность</span><br>' : "") +
+          (q.kind === "multi" ? '<span class="pill kind-pill">Множественный выбор</span><br>' : "") +
           "<b>" + (idx + 1) + ".</b><br>" +
           "<span>" + q.text + "</span>" +
           mediaHtml +
@@ -171,7 +185,7 @@
       );
     }).join("");
 
-    const controls = quizContainer.querySelectorAll("input[type='radio'], select[data-match='1'], select[data-sequence='1'], textarea[data-open='1'], input[data-fill='1']");
+    const controls = quizContainer.querySelectorAll("input[type='radio'], input[type='checkbox'], select[data-match='1'], select[data-sequence='1'], textarea[data-open='1'], input[data-fill='1']");
     controls.forEach((control) => {
       const eventName = control.tagName === "TEXTAREA" || targetIsTextInput(control) ? "input" : "change";
       control.addEventListener(eventName, function (event) {
@@ -223,7 +237,11 @@
         const input = document.querySelector('input[data-fill="1"][data-question-index="' + idx + '"]');
         return input ? String(input.value || "") : "";
       }
-      const picked = document.querySelector('input[name="q-' + idx + '"]:checked');
+      if (q.kind === "multi") {
+        const picked = Array.from(document.querySelectorAll('input[name="q-' + idx + '"]:checked'));
+        return picked.map((input) => Number(input.value)).filter((value) => !Number.isNaN(value)).sort((a, b) => a - b);
+      }
+      const picked = document.querySelector('input[type="radio"][name="q-' + idx + '"]:checked');
       return picked ? Number(picked.value) : -1;
     });
     const payload = {
@@ -271,6 +289,13 @@
           if (question.kind === "fill_blank" && typeof val === "string") {
             const input = document.querySelector('input[data-fill="1"][data-question-index="' + idx + '"]');
             if (input) input.value = val;
+            return;
+          }
+          if (question.kind === "multi" && Array.isArray(val)) {
+            val.forEach((pickedValue) => {
+              const checkbox = document.querySelector('input[type="checkbox"][name="q-' + idx + '"][value="' + pickedValue + '"]');
+              if (checkbox) checkbox.checked = true;
+            });
             return;
           }
           if (typeof val === "number" && val >= 0) {
@@ -415,6 +440,17 @@
         selectedOptionText = textarea ? String(textarea.value || "") : "";
         correctOptionText = "Ручная проверка";
         requiresManualReview = true;
+      } else if (q.kind === "multi") {
+        const checked = Array.from(document.querySelectorAll('input[type="checkbox"][name="q-' + idx + '"]:checked'))
+          .map((input) => Number(input.value))
+          .filter((value) => !Number.isNaN(value))
+          .sort((a, b) => a - b);
+        const correctIndexes = Array.isArray(q.answer) ? q.answer.slice().sort((a, b) => a - b) : [];
+        const sameLength = checked.length === correctIndexes.length;
+        isCorrect = sameLength && checked.every((value, arrIdx) => value === correctIndexes[arrIdx]);
+        selectedOptionIndex = checked;
+        selectedOptionText = checked.length ? checked.map((value) => q.options[value]).join(" | ") : "";
+        correctOptionText = correctIndexes.length ? correctIndexes.map((value) => q.options[value]).join(" | ") : "";
       } else {
         const picked = document.querySelector('input[name="q-' + idx + '"]:checked');
         selectedOptionIndex = picked ? Number(picked.value) : -1;
